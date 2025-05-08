@@ -31,3 +31,19 @@ func (h *VTHandler) GetReport(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, report)
 }
+
+func (h *VTHandler) GetDomain(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain id is required"})
+		return
+	}
+
+	domain, err := h.vtService.GetDomainData(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, domain)
+}
