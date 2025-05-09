@@ -125,7 +125,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	}
 
 	// Save domain data
-	if err := s.domainRepo.SaveDomain(domain); err != nil {
+	if err := s.domainRepo.SaveDomain(tx, domain); err != nil {
 		log.Printf("Error saving domain data for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 		TotalVotes:           votesJSON,
 	}
 
-	if err := s.domainRepo.SaveDetails(details); err != nil {
+	if err := s.domainRepo.SaveDetails(tx, details); err != nil {
 		log.Printf("Error saving domain details for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.domainRepo.SaveCategories(id, vtResponse.Data.Attributes.Categories); err != nil {
+		if err := s.domainRepo.SaveCategories(tx, id, vtResponse.Data.Attributes.Categories); err != nil {
 			log.Printf("Error saving categories for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -174,7 +174,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.domainRepo.SaveAnalysisResults(id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
+		if err := s.domainRepo.SaveAnalysisResults(tx, id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
 			log.Printf("Error saving analysis results for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -193,7 +193,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	}
 
 	// Save to cache
-	if err := s.domainRepo.SaveCache(id, domain, 1*time.Hour); err != nil {
+	if err := s.domainRepo.SaveCache(tx, id, domain, 1*time.Hour); err != nil {
 		log.Printf("Error saving to cache for ID %s: %v", id, err)
 		return nil, err
 	}

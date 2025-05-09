@@ -103,7 +103,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	}
 
 	// Save IP data
-	if err := s.ipRepo.SaveIPAddress(ip); err != nil {
+	if err := s.ipRepo.SaveIPAddress(tx, ip); err != nil {
 		log.Printf("Error saving IP data for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 		TotalVotes: votesJSON,
 	}
 
-	if err := s.ipRepo.SaveDetails(details); err != nil {
+	if err := s.ipRepo.SaveDetails(tx, details); err != nil {
 		log.Printf("Error saving IP details for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.ipRepo.SaveTags(id, vtResponse.Data.Attributes.Tags); err != nil {
+		if err := s.ipRepo.SaveTags(tx, id, vtResponse.Data.Attributes.Tags); err != nil {
 			log.Printf("Error saving tags for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -143,7 +143,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.ipRepo.SaveAnalysisResults(id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
+		if err := s.ipRepo.SaveAnalysisResults(tx, id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
 			log.Printf("Error saving analysis results for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -162,7 +162,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	}
 
 	// Save to cache
-	if err := s.ipRepo.SaveCache(id, ip, 1*time.Hour); err != nil {
+	if err := s.ipRepo.SaveCache(tx, id, ip, 1*time.Hour); err != nil {
 		log.Printf("Error saving to cache for ID %s: %v", id, err)
 		return nil, err
 	}

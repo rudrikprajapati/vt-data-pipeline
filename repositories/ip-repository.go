@@ -14,8 +14,7 @@ type IPRepository struct {
 	db *sqlx.DB
 }
 
-// NewIPRepository creates and returns a new instance of IPRepository.
-// It takes a sqlx.DB connection as a parameter which will be used for all database operations.
+// NewIPRepository creates and returns a new instance of IPRepository
 func NewIPRepository(db *sqlx.DB) *IPRepository {
 	return &IPRepository{db: db}
 }
@@ -41,8 +40,8 @@ func (r *IPRepository) GetIPAddress(id string) (*models.IPAddress, error) {
 }
 
 // SaveIPAddress saves or updates IP data
-func (r *IPRepository) SaveIPAddress(ip *models.IPAddress) error {
-	_, err := r.db.NamedExec(`INSERT INTO ip_addresses (id, type, last_analysis_date, asn, reputation, country, as_owner, regional_internet_registry, network, whois_date, last_modification_date, continent, harmless_count, malicious_count, suspicious_count, undetected_count, timeout_count, created_at, updated_at)
+func (r *IPRepository) SaveIPAddress(tx *sqlx.Tx, ip *models.IPAddress) error {
+	_, err := tx.NamedExec(`INSERT INTO ip_addresses (id, type, last_analysis_date, asn, reputation, country, as_owner, regional_internet_registry, network, whois_date, last_modification_date, continent, harmless_count, malicious_count, suspicious_count, undetected_count, timeout_count, created_at, updated_at)
                           VALUES (:id, :type, :last_analysis_date, :asn, :reputation, :country, :as_owner, :regional_internet_registry, :network, :whois_date, :last_modification_date, :continent, :harmless_count, :malicious_count, :suspicious_count, :undetected_count, :timeout_count, :created_at, :updated_at)
                           ON CONFLICT (id) DO UPDATE SET
                           type = EXCLUDED.type,
@@ -66,15 +65,15 @@ func (r *IPRepository) SaveIPAddress(ip *models.IPAddress) error {
 }
 
 // SaveTags saves IP tags
-func (r *IPRepository) SaveTags(ipID string, tags []string) error {
+func (r *IPRepository) SaveTags(tx *sqlx.Tx, ipID string, tags []string) error {
 	// Clear existing tags
-	_, err := r.db.Exec("DELETE FROM ip_tags WHERE ip_id=$1", ipID)
+	_, err := tx.Exec("DELETE FROM ip_tags WHERE ip_id=$1", ipID)
 	if err != nil {
 		return err
 	}
 
 	// Prepare the insert statement
-	stmt, err := r.db.Prepare(`INSERT INTO ip_tags (ip_id, tag)
+	stmt, err := tx.Prepare(`INSERT INTO ip_tags (ip_id, tag)
                           VALUES ($1, $2)`)
 	if err != nil {
 		return err
@@ -92,19 +91,19 @@ func (r *IPRepository) SaveTags(ipID string, tags []string) error {
 }
 
 // SaveAnalysisResults saves IP analysis results
-func (r *IPRepository) SaveAnalysisResults(ipID string, results map[string]struct {
+func (r *IPRepository) SaveAnalysisResults(tx *sqlx.Tx, ipID string, results map[string]struct {
 	Category string `json:"category"`
 	Result   string `json:"result"`
 	Method   string `json:"method"`
 }) error {
 	// Clear existing results
-	_, err := r.db.Exec("DELETE FROM ip_analysis_results WHERE ip_id=$1", ipID)
+	_, err := tx.Exec("DELETE FROM ip_analysis_results WHERE ip_id=$1", ipID)
 	if err != nil {
 		return err
 	}
 
 	// Prepare the insert statement
-	stmt, err := r.db.Prepare(`INSERT INTO ip_analysis_results (ip_id, engine_name, category, result, method)
+	stmt, err := tx.Prepare(`INSERT INTO ip_analysis_results (ip_id, engine_name, category, result, method)
                           VALUES ($1, $2, $3, $4, $5)`)
 	if err != nil {
 		return err
@@ -127,8 +126,8 @@ func (r *IPRepository) SaveAnalysisResults(ipID string, results map[string]struc
 }
 
 // SaveDetails saves IP details
-func (r *IPRepository) SaveDetails(details *models.IPDetails) error {
-	_, err := r.db.NamedExec(`INSERT INTO ip_details (ip_id, whois, total_votes)
+func (r *IPRepository) SaveDetails(tx *sqlx.Tx, details *models.IPDetails) error {
+	_, err := tx.NamedExec(`INSERT INTO ip_details (ip_id, whois, total_votes)
                           VALUES (:ip_id, :whois, :total_votes)
                           ON CONFLICT (ip_id) DO UPDATE SET
                           whois = EXCLUDED.whois,
@@ -137,7 +136,7 @@ func (r *IPRepository) SaveDetails(details *models.IPDetails) error {
 }
 
 // SaveCache saves IP data to cache (shared with domains)
-func (r *IPRepository) SaveCache(id string, data interface{}, expiration time.Duration) error {
+func (r *IPRepository) SaveCache(tx *sqlx.Tx, id string, data interface{}, expiration time.Duration) error {
 	log.Printf("Starting cache save operation for ID: %s", id)
 
 	cacheData, err := json.Marshal(data)
@@ -152,14 +151,6 @@ func (r *IPRepository) SaveCache(id string, data interface{}, expiration time.Du
 		CachedAt:  time.Now(),
 		ExpiresAt: time.Now().Add(expiration),
 	}
-
-	// Begin transaction
-	tx, err := r.db.Beginx()
-	if err != nil {
-		log.Printf("Error beginning transaction for cache save ID %s: %v", id, err)
-		return err
-	}
-	defer tx.Rollback()
 
 	// Check current cache size
 	var count int
@@ -207,13 +198,6 @@ func (r *IPRepository) SaveCache(id string, data interface{}, expiration time.Du
 	}
 	log.Printf("Successfully saved cache entry for ID: %s, Expires at: %v",
 		id, cacheEntry.ExpiresAt.Format(time.RFC3339))
-
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
-		log.Printf("Error committing transaction for cache save ID %s: %v", id, err)
-		return err
-	}
-	log.Printf("Successfully committed cache transaction for ID: %s", id)
 
 	return nil
 }
