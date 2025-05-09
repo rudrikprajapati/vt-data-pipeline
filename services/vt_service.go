@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"vt-data-pipeline/config"
@@ -128,21 +129,7 @@ func (s *VTService) FetchVTReport(id, reportType string) (*models.Domain, error)
 	}
 	log.Printf("Successfully saved domain data for ID: %s", id)
 
-	// Save categories
-	if err := s.domainRepo.SaveCategories(id, vtResponse.Data.Attributes.Categories); err != nil {
-		log.Printf("Error saving categories for ID %s: %v", id, err)
-		return nil, err
-	}
-	log.Printf("Successfully saved categories for ID: %s", id)
-
-	// Save analysis results
-	if err := s.domainRepo.SaveAnalysisResults(id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
-		log.Printf("Error saving analysis results for ID %s: %v", id, err)
-		return nil, err
-	}
-	log.Printf("Successfully saved analysis results for ID: %s", id)
-
-	// Save details
+	// Save domain details
 	dnsRecordsJSON, _ := json.Marshal(vtResponse.Data.Attributes.LastDNSRecords)
 	certificateJSON, _ := json.Marshal(vtResponse.Data.Attributes.LastHTTPSCertificate)
 	rdapJSON, _ := json.Marshal(vtResponse.Data.Attributes.RDAP)
@@ -164,6 +151,44 @@ func (s *VTService) FetchVTReport(id, reportType string) (*models.Domain, error)
 		return nil, err
 	}
 	log.Printf("Successfully saved domain details for ID: %s", id)
+
+	// go routine for insert categories and analysis
+	errChan := make(chan error, 2)
+	var wg sync.WaitGroup
+
+	// Save categories
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.domainRepo.SaveCategories(id, vtResponse.Data.Attributes.Categories); err != nil {
+			log.Printf("Error saving categories for ID %s: %v", id, err)
+			errChan <- err
+			return
+		}
+		log.Printf("Successfully saved categories for ID: %s", id)
+	}()
+
+	// Save analysis results
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.domainRepo.SaveAnalysisResults(id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
+			log.Printf("Error saving analysis results for ID %s: %v", id, err)
+			errChan <- err
+			return
+		}
+		log.Printf("Successfully saved analysis results for ID: %s", id)
+	}()
+
+	wg.Wait()
+	close(errChan)
+
+	// Check for any errors
+	for err := range errChan {
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// Save to cache
 	if err := s.domainRepo.SaveCache(id, domain, 1*time.Hour); err != nil {

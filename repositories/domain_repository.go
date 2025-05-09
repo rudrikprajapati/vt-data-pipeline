@@ -69,13 +69,11 @@ func (r *DomainRepository) SaveCategories(domainID string, categories map[string
 
 	// Insert new categories
 	for engine, category := range categories {
-		categoryEntry := models.DomainCategory{
-			DomainID:   domainID,
-			EngineName: engine,
-			Category:   category,
-		}
-		_, err = r.db.NamedExec(`INSERT INTO domain_categories (domain_id, engine_name, category)
-                              VALUES (:domain_id, :engine_name, :category)`, categoryEntry)
+		_, err = r.db.Exec(`INSERT INTO domain_categories (domain_id, engine_name, category)
+                          VALUES ($1, $2, $3)`,
+			domainID,
+			engine,
+			category)
 		if err != nil {
 			return err
 		}
@@ -95,17 +93,22 @@ func (r *DomainRepository) SaveAnalysisResults(domainID string, results map[stri
 		return err
 	}
 
+	// Prepare the insert statement
+	stmt, err := r.db.Prepare(`INSERT INTO domain_analysis_results (domain_id, engine_name, category, result, method)
+                          VALUES ($1, $2, $3, $4, $5)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
 	// Insert new results
 	for engine, result := range results {
-		analysisResult := models.DomainAnalysisResult{
-			DomainID:   domainID,
-			EngineName: engine,
-			Category:   result.Category,
-			Result:     result.Result,
-			Method:     result.Method,
-		}
-		_, err = r.db.NamedExec(`INSERT INTO domain_analysis_results (domain_id, engine_name, category, result, method)
-                              VALUES (:domain_id, :engine_name, :category, :result, :method)`, analysisResult)
+		_, err = stmt.Exec(
+			domainID,
+			engine,
+			result.Category,
+			result.Result,
+			result.Method)
 		if err != nil {
 			return err
 		}
