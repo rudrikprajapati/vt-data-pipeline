@@ -24,7 +24,7 @@ func (h *VTHandler) GetReport(c *gin.Context) {
 		return
 	}
 
-	var report interface{}
+	var report any
 	var err error
 
 	switch reportType {

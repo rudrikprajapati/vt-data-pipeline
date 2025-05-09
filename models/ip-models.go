@@ -71,8 +71,8 @@ type VirusTotalIPResponse struct {
 				Result   string `json:"result"`
 				Method   string `json:"method"`
 			} `json:"last_analysis_results"`
-			Whois      string      `json:"whois"`
-			TotalVotes interface{} `json:"total_votes"`
+			Whois      string `json:"whois"`
+			TotalVotes any    `json:"total_votes"`
 		} `json:"attributes"`
 		ID   string `json:"id"`
 		Type string `json:"type"`

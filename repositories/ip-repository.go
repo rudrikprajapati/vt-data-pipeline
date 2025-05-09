@@ -136,7 +136,7 @@ func (r *IPRepository) SaveDetails(tx *sqlx.Tx, details *models.IPDetails) error
 }
 
 // SaveCache saves IP data to cache (shared with domains)
-func (r *IPRepository) SaveCache(tx *sqlx.Tx, id string, data interface{}, expiration time.Duration) error {
+func (r *IPRepository) SaveCache(tx *sqlx.Tx, id string, data any, expiration time.Duration) error {
 	log.Printf("Starting cache save operation for ID: %s", id)
 
 	cacheData, err := json.Marshal(data)

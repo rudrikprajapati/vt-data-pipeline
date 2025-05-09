@@ -82,12 +82,12 @@ type VirusTotalDomainResponse struct {
 				Result   string `json:"result"`
 				Method   string `json:"method"`
 			} `json:"last_analysis_results"`
-			LastDNSRecords       []interface{} `json:"last_dns_records"`
-			LastHTTPSCertificate interface{}   `json:"last_https_certificate"`
-			RDAP                 interface{}   `json:"rdap"`
-			Whois                string        `json:"whois"`
-			PopularityRanks      interface{}   `json:"popularity_ranks"`
-			TotalVotes           interface{}   `json:"total_votes"`
+			LastDNSRecords       []any  `json:"last_dns_records"`
+			LastHTTPSCertificate any    `json:"last_https_certificate"`
+			RDAP                 any    `json:"rdap"`
+			Whois                string `json:"whois"`
+			PopularityRanks      any    `json:"popularity_ranks"`
+			TotalVotes           any    `json:"total_votes"`
 		} `json:"attributes"`
 		ID   string `json:"id"`
 		Type string `json:"type"`

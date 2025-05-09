@@ -137,7 +137,7 @@ func (r *DomainRepository) SaveDetails(tx *sqlx.Tx, details *models.DomainDetail
 }
 
 // SaveCache saves domain data to cache
-func (r *DomainRepository) SaveCache(tx *sqlx.Tx, id string, data interface{}, expiration time.Duration) error {
+func (r *DomainRepository) SaveCache(tx *sqlx.Tx, id string, data any, expiration time.Duration) error {
 	log.Printf("Starting cache save operation for domain ID: %s", id)
 
 	cacheData, err := json.Marshal(data)
