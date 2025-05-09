@@ -19,6 +19,7 @@ type VTService struct {
 	cfg        *config.Config
 	db         *sqlx.DB
 	domainRepo *repositories.DomainRepository
+	ipRepo     *repositories.IPRepository
 }
 
 func NewVTService(cfg *config.Config, db *sqlx.DB) *VTService {
@@ -26,10 +27,11 @@ func NewVTService(cfg *config.Config, db *sqlx.DB) *VTService {
 		cfg:        cfg,
 		db:         db,
 		domainRepo: repositories.NewDomainRepository(db),
+		ipRepo:     repositories.NewIPRepository(db),
 	}
 }
 
-func (s *VTService) FetchVTReport(id, reportType string) (*models.Domain, error) {
+func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, error) {
 	log.Printf("Starting FetchVTReport for ID: %s, Type: %s", id, reportType)
 
 	// Check cache first

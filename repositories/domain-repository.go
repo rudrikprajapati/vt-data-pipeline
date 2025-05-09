@@ -13,6 +13,8 @@ type DomainRepository struct {
 	db *sqlx.DB
 }
 
+// NewDomainRepository creates and returns a new instance of DomainRepository.
+// It takes a sqlx.DB connection as a parameter which will be used for all database operations.
 func NewDomainRepository(db *sqlx.DB) *DomainRepository {
 	return &DomainRepository{db: db}
 }
@@ -67,13 +69,17 @@ func (r *DomainRepository) SaveCategories(domainID string, categories map[string
 		return err
 	}
 
+	// Prepare the insert statement
+	stmt, err := r.db.Prepare(`INSERT INTO domain_categories (domain_id, engine_name, category)
+                          VALUES ($1, $2, $3)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
 	// Insert new categories
 	for engine, category := range categories {
-		_, err = r.db.Exec(`INSERT INTO domain_categories (domain_id, engine_name, category)
-                          VALUES ($1, $2, $3)`,
-			domainID,
-			engine,
-			category)
+		_, err = stmt.Exec(domainID, engine, category)
 		if err != nil {
 			return err
 		}

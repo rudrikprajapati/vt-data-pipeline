@@ -18,13 +18,22 @@ func NewVTHandler(vtService *services.VTService) *VTHandler {
 
 func (h *VTHandler) GetReport(c *gin.Context) {
 	id := c.Param("id")
-	reportType := c.Query("type") // e.g., domains, ip_addresses, files
-	if reportType == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "type is required"})
+	reportType := c.Query("type") // domains, ip_addresses
+	if reportType != "domains" && reportType != "ip_addresses" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only domains or ip_addresses supported"})
 		return
 	}
 
-	report, err := h.vtService.FetchVTReport(id, reportType)
+	var report interface{}
+	var err error
+
+	switch reportType {
+	case "domains":
+		report, err = h.vtService.FetchDomainVTReport(id, reportType)
+	case "ip_addresses":
+		report, err = h.vtService.FetchIPReport(id, reportType)
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
