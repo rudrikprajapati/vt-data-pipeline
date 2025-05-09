@@ -4,8 +4,6 @@ import (
 	"vt-data-pipeline/api"
 	"vt-data-pipeline/config"
 	"vt-data-pipeline/db"
-	"vt-data-pipeline/handlers"
-	"vt-data-pipeline/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -23,11 +21,8 @@ func main() {
 	}
 
 	dbConn := db.InitDB(cfg.Database.URL)
-	vtService := services.NewVTService(cfg, dbConn)
-	vtHandler := handlers.NewVTHandler(vtService)
-
 	r := gin.Default()
-	api.SetupRoutes(r, vtHandler)
+	api.SetupRoutes(r, dbConn)
 
 	r.Run(":8080")
 }

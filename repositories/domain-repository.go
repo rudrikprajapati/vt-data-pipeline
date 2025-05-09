@@ -10,19 +10,10 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type DomainRepository struct {
-	db *sqlx.DB
-}
-
-// NewDomainRepository creates and returns a new instance of DomainRepository
-func NewDomainRepository(db *sqlx.DB) *DomainRepository {
-	return &DomainRepository{db: db}
-}
-
 // GetFromCache retrieves domain data from cache
-func (r *DomainRepository) GetFromCache(id string) (*models.CacheEntry, error) {
+func GetDomainReportFromCache(id string, db *sqlx.DB) (*models.CacheEntry, error) {
 	var cache models.CacheEntry
-	err := r.db.Get(&cache, "SELECT id, data, cached_at, expires_at FROM domain_cache WHERE id=$1 AND expires_at > $2", id, time.Now())
+	err := db.Get(&cache, "SELECT id, data, cached_at, expires_at FROM domain_cache WHERE id=$1 AND expires_at > $2", id, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -30,9 +21,9 @@ func (r *DomainRepository) GetFromCache(id string) (*models.CacheEntry, error) {
 }
 
 // GetDomain retrieves domain data from the main table
-func (r *DomainRepository) GetDomain(id string) (*models.Domain, error) {
+func GetDomain(id string, db *sqlx.DB) (*models.Domain, error) {
 	var domain models.Domain
-	err := r.db.Get(&domain, "SELECT * FROM domains WHERE id=$1", id)
+	err := db.Get(&domain, "SELECT * FROM domains WHERE id=$1", id)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +31,7 @@ func (r *DomainRepository) GetDomain(id string) (*models.Domain, error) {
 }
 
 // SaveDomain saves or updates domain data
-func (r *DomainRepository) SaveDomain(tx *sqlx.Tx, domain *models.Domain) error {
+func SaveDomain(tx *sqlx.Tx, domain *models.Domain) error {
 	_, err := tx.NamedExec(`INSERT INTO domains (id, type, creation_date, expiration_date, last_analysis_date, reputation, registrar, tld, whois_date, harmless_count, malicious_count, suspicious_count, undetected_count, timeout_count, created_at, updated_at)
                           VALUES (:id, :type, :creation_date, :expiration_date, :last_analysis_date, :reputation, :registrar, :tld, :whois_date, :harmless_count, :malicious_count, :suspicious_count, :undetected_count, :timeout_count, :created_at, :updated_at)
                           ON CONFLICT (id) DO UPDATE SET
@@ -62,7 +53,7 @@ func (r *DomainRepository) SaveDomain(tx *sqlx.Tx, domain *models.Domain) error 
 }
 
 // SaveCategories saves domain categories
-func (r *DomainRepository) SaveCategories(tx *sqlx.Tx, domainID string, categories map[string]string) error {
+func SaveDomainCategories(tx *sqlx.Tx, domainID string, categories map[string]string) error {
 	// Clear existing categories
 	_, err := tx.Exec("DELETE FROM domain_categories WHERE domain_id=$1", domainID)
 	if err != nil {
@@ -88,7 +79,7 @@ func (r *DomainRepository) SaveCategories(tx *sqlx.Tx, domainID string, categori
 }
 
 // SaveAnalysisResults saves domain analysis results
-func (r *DomainRepository) SaveAnalysisResults(tx *sqlx.Tx, domainID string, results map[string]struct {
+func SaveDomainAnalysisResults(tx *sqlx.Tx, domainID string, results map[string]struct {
 	Category string `json:"category"`
 	Result   string `json:"result"`
 	Method   string `json:"method"`
@@ -123,7 +114,7 @@ func (r *DomainRepository) SaveAnalysisResults(tx *sqlx.Tx, domainID string, res
 }
 
 // SaveDetails saves domain details
-func (r *DomainRepository) SaveDetails(tx *sqlx.Tx, details *models.DomainDetails) error {
+func SaveDomainDetails(tx *sqlx.Tx, details *models.DomainDetails) error {
 	_, err := tx.NamedExec(`INSERT INTO domain_details (domain_id, last_dns_records, last_https_certificate, rdap, whois, popularity_ranks, total_votes)
                           VALUES (:domain_id, :last_dns_records, :last_https_certificate, :rdap, :whois, :popularity_ranks, :total_votes)
                           ON CONFLICT (domain_id) DO UPDATE SET
@@ -137,12 +128,12 @@ func (r *DomainRepository) SaveDetails(tx *sqlx.Tx, details *models.DomainDetail
 }
 
 // SaveCache saves domain data to cache
-func (r *DomainRepository) SaveCache(tx *sqlx.Tx, id string, data any, expiration time.Duration) error {
-	log.Printf("Starting cache save operation for domain ID: %s", id)
+func SaveDomainCache(tx *sqlx.Tx, id string, data any, expiration time.Duration) error {
+	log.Printf("Starting cache save operation for ID: %s", id)
 
 	cacheData, err := json.Marshal(data)
 	if err != nil {
-		log.Printf("Error marshaling cache data for domain ID %s: %v", id, err)
+		log.Printf("Error marshaling cache data for ID %s: %v", id, err)
 		return err
 	}
 
@@ -157,7 +148,7 @@ func (r *DomainRepository) SaveCache(tx *sqlx.Tx, id string, data any, expiratio
 	var count int
 	err = tx.Get(&count, "SELECT COUNT(*) FROM domain_cache")
 	if err != nil {
-		log.Printf("Error getting cache count for domain ID %s: %v", id, err)
+		log.Printf("Error getting cache count for ID %s: %v", id, err)
 		return err
 	}
 	log.Printf("Current cache size: %d entries", count)
@@ -171,7 +162,7 @@ func (r *DomainRepository) SaveCache(tx *sqlx.Tx, id string, data any, expiratio
 		}
 		err = tx.Get(&oldestEntry, "SELECT id, cached_at FROM domain_cache ORDER BY cached_at ASC LIMIT 1")
 		if err != nil {
-			log.Printf("Error getting oldest cache entry for domain ID %s: %v", id, err)
+			log.Printf("Error getting oldest cache entry for ID %s: %v", id, err)
 			return err
 		}
 
@@ -180,7 +171,7 @@ func (r *DomainRepository) SaveCache(tx *sqlx.Tx, id string, data any, expiratio
 
 		_, err = tx.Exec("DELETE FROM domain_cache WHERE id IN (SELECT id FROM domain_cache ORDER BY cached_at ASC LIMIT 1)")
 		if err != nil {
-			log.Printf("Error deleting oldest cache entry for domain ID %s: %v", id, err)
+			log.Printf("Error deleting oldest cache entry for ID %s: %v", id, err)
 			return err
 		}
 		log.Printf("Successfully removed oldest cache entry")

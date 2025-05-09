@@ -7,14 +7,18 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"vt-data-pipeline/config"
 	"vt-data-pipeline/models"
+	"vt-data-pipeline/repositories"
+
+	"github.com/jmoiron/sqlx"
 )
 
-func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, error) {
+func FetchIPReport(id, reportType string, db *sqlx.DB) (*models.IPAddress, error) {
 	log.Printf("Starting FetchIPReport for ID: %s, Type: %s", id, reportType)
 
 	// Check cache first
-	cache, err := s.ipRepo.GetFromCache(id)
+	cache, err := repositories.GetIPReportFromCache(id, db)
 	if err == nil {
 		log.Printf("Cache hit for ID: %s", id)
 		var ip models.IPAddress
@@ -29,7 +33,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	// Fetch from VirusTotal API
 	url := fmt.Sprintf("https://www.virustotal.com/api/v3/%s/%s", reportType, id)
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("x-apikey", s.cfg.VirusTotal.APIKey)
+	req.Header.Set("x-apikey", config.GetVTAPIKey())
 
 	client := &http.Client{}
 	log.Printf("Making API request to VirusTotal for ID: %s", id)
@@ -50,7 +54,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	log.Printf("Successfully decoded API response for ID: %s", id)
 
 	// Begin transaction
-	tx, err := s.db.Beginx()
+	tx, err := db.Beginx()
 	if err != nil {
 		log.Printf("Error beginning transaction for ID %s: %v", id, err)
 		return nil, err
@@ -103,7 +107,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	}
 
 	// Save IP data
-	if err := s.ipRepo.SaveIPAddress(tx, ip); err != nil {
+	if err := repositories.SaveIPAddress(tx, ip); err != nil {
 		log.Printf("Error saving IP data for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -117,7 +121,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 		TotalVotes: votesJSON,
 	}
 
-	if err := s.ipRepo.SaveDetails(tx, details); err != nil {
+	if err := repositories.SaveIPDetails(tx, details); err != nil {
 		log.Printf("Error saving IP details for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -131,7 +135,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.ipRepo.SaveTags(tx, id, vtResponse.Data.Attributes.Tags); err != nil {
+		if err := repositories.SaveIPTags(tx, id, vtResponse.Data.Attributes.Tags); err != nil {
 			log.Printf("Error saving tags for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -143,7 +147,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.ipRepo.SaveAnalysisResults(tx, id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
+		if err := repositories.SaveIPAnalysisResults(tx, id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
 			log.Printf("Error saving analysis results for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -162,7 +166,7 @@ func (s *VTService) FetchIPReport(id, reportType string) (*models.IPAddress, err
 	}
 
 	// Save to cache
-	if err := s.ipRepo.SaveCache(tx, id, ip, 1*time.Hour); err != nil {
+	if err := repositories.SaveIPReportCache(tx, id, ip, 1*time.Hour); err != nil {
 		log.Printf("Error saving to cache for ID %s: %v", id, err)
 		return nil, err
 	}

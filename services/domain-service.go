@@ -15,27 +15,11 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type VTService struct {
-	cfg        *config.Config
-	db         *sqlx.DB
-	domainRepo *repositories.DomainRepository
-	ipRepo     *repositories.IPRepository
-}
-
-func NewVTService(cfg *config.Config, db *sqlx.DB) *VTService {
-	return &VTService{
-		cfg:        cfg,
-		db:         db,
-		domainRepo: repositories.NewDomainRepository(db),
-		ipRepo:     repositories.NewIPRepository(db),
-	}
-}
-
-func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, error) {
+func FetchDomainVTReport(id, reportType string, db *sqlx.DB) (*models.Domain, error) {
 	log.Printf("Starting FetchVTReport for ID: %s, Type: %s", id, reportType)
 
 	// Check cache first
-	cache, err := s.domainRepo.GetFromCache(id)
+	cache, err := repositories.GetDomainReportFromCache(id, db)
 	if err == nil {
 		log.Printf("Cache hit for ID: %s", id)
 		var domain models.Domain
@@ -50,7 +34,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	// Fetch from VirusTotal API
 	url := fmt.Sprintf("https://www.virustotal.com/api/v3/%s/%s", reportType, id)
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("x-apikey", s.cfg.VirusTotal.APIKey)
+	req.Header.Set("x-apikey", config.GetVTAPIKey())
 
 	client := &http.Client{}
 	log.Printf("Making API request to VirusTotal for ID: %s", id)
@@ -71,7 +55,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	log.Printf("Successfully decoded API response for ID: %s", id)
 
 	// Begin transaction
-	tx, err := s.db.Beginx()
+	tx, err := db.Beginx()
 	if err != nil {
 		log.Printf("Error beginning transaction for ID %s: %v", id, err)
 		return nil, err
@@ -125,7 +109,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	}
 
 	// Save domain data
-	if err := s.domainRepo.SaveDomain(tx, domain); err != nil {
+	if err := repositories.SaveDomain(tx, domain); err != nil {
 		log.Printf("Error saving domain data for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -148,7 +132,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 		TotalVotes:           votesJSON,
 	}
 
-	if err := s.domainRepo.SaveDetails(tx, details); err != nil {
+	if err := repositories.SaveDomainDetails(tx, details); err != nil {
 		log.Printf("Error saving domain details for ID %s: %v", id, err)
 		return nil, err
 	}
@@ -162,7 +146,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.domainRepo.SaveCategories(tx, id, vtResponse.Data.Attributes.Categories); err != nil {
+		if err := repositories.SaveDomainCategories(tx, id, vtResponse.Data.Attributes.Categories); err != nil {
 			log.Printf("Error saving categories for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -174,7 +158,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := s.domainRepo.SaveAnalysisResults(tx, id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
+		if err := repositories.SaveDomainAnalysisResults(tx, id, vtResponse.Data.Attributes.LastAnalysisResults); err != nil {
 			log.Printf("Error saving analysis results for ID %s: %v", id, err)
 			errChan <- err
 			return
@@ -193,7 +177,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	}
 
 	// Save to cache
-	if err := s.domainRepo.SaveCache(tx, id, domain, 1*time.Hour); err != nil {
+	if err := repositories.SaveDomainCache(tx, id, domain, 1*time.Hour); err != nil {
 		log.Printf("Error saving to cache for ID %s: %v", id, err)
 		return nil, err
 	}

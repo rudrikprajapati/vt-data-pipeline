@@ -10,19 +10,10 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type IPRepository struct {
-	db *sqlx.DB
-}
-
-// NewIPRepository creates and returns a new instance of IPRepository
-func NewIPRepository(db *sqlx.DB) *IPRepository {
-	return &IPRepository{db: db}
-}
-
 // GetFromCache retrieves IP data from cache (shared with domains)
-func (r *IPRepository) GetFromCache(id string) (*models.CacheEntry, error) {
+func GetIPReportFromCache(id string, db *sqlx.DB) (*models.CacheEntry, error) {
 	var cache models.CacheEntry
-	err := r.db.Get(&cache, "SELECT id, data, cached_at, expires_at FROM domain_cache WHERE id=$1 AND expires_at > $2", id, time.Now())
+	err := db.Get(&cache, "SELECT id, data, cached_at, expires_at FROM domain_cache WHERE id=$1 AND expires_at > $2", id, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -30,9 +21,9 @@ func (r *IPRepository) GetFromCache(id string) (*models.CacheEntry, error) {
 }
 
 // GetIPAddress retrieves IP data from the main table
-func (r *IPRepository) GetIPAddress(id string) (*models.IPAddress, error) {
+func GetIPAddress(id string, db *sqlx.DB) (*models.IPAddress, error) {
 	var ip models.IPAddress
-	err := r.db.Get(&ip, "SELECT * FROM ip_addresses WHERE id=$1", id)
+	err := db.Get(&ip, "SELECT * FROM ip_addresses WHERE id=$1", id)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +31,7 @@ func (r *IPRepository) GetIPAddress(id string) (*models.IPAddress, error) {
 }
 
 // SaveIPAddress saves or updates IP data
-func (r *IPRepository) SaveIPAddress(tx *sqlx.Tx, ip *models.IPAddress) error {
+func SaveIPAddress(tx *sqlx.Tx, ip *models.IPAddress) error {
 	_, err := tx.NamedExec(`INSERT INTO ip_addresses (id, type, last_analysis_date, asn, reputation, country, as_owner, regional_internet_registry, network, whois_date, last_modification_date, continent, harmless_count, malicious_count, suspicious_count, undetected_count, timeout_count, created_at, updated_at)
                           VALUES (:id, :type, :last_analysis_date, :asn, :reputation, :country, :as_owner, :regional_internet_registry, :network, :whois_date, :last_modification_date, :continent, :harmless_count, :malicious_count, :suspicious_count, :undetected_count, :timeout_count, :created_at, :updated_at)
                           ON CONFLICT (id) DO UPDATE SET
@@ -65,7 +56,7 @@ func (r *IPRepository) SaveIPAddress(tx *sqlx.Tx, ip *models.IPAddress) error {
 }
 
 // SaveTags saves IP tags
-func (r *IPRepository) SaveTags(tx *sqlx.Tx, ipID string, tags []string) error {
+func SaveIPTags(tx *sqlx.Tx, ipID string, tags []string) error {
 	// Clear existing tags
 	_, err := tx.Exec("DELETE FROM ip_tags WHERE ip_id=$1", ipID)
 	if err != nil {
@@ -91,7 +82,7 @@ func (r *IPRepository) SaveTags(tx *sqlx.Tx, ipID string, tags []string) error {
 }
 
 // SaveAnalysisResults saves IP analysis results
-func (r *IPRepository) SaveAnalysisResults(tx *sqlx.Tx, ipID string, results map[string]struct {
+func SaveIPAnalysisResults(tx *sqlx.Tx, ipID string, results map[string]struct {
 	Category string `json:"category"`
 	Result   string `json:"result"`
 	Method   string `json:"method"`
@@ -126,7 +117,7 @@ func (r *IPRepository) SaveAnalysisResults(tx *sqlx.Tx, ipID string, results map
 }
 
 // SaveDetails saves IP details
-func (r *IPRepository) SaveDetails(tx *sqlx.Tx, details *models.IPDetails) error {
+func SaveIPDetails(tx *sqlx.Tx, details *models.IPDetails) error {
 	_, err := tx.NamedExec(`INSERT INTO ip_details (ip_id, whois, total_votes)
                           VALUES (:ip_id, :whois, :total_votes)
                           ON CONFLICT (ip_id) DO UPDATE SET
@@ -136,7 +127,7 @@ func (r *IPRepository) SaveDetails(tx *sqlx.Tx, details *models.IPDetails) error
 }
 
 // SaveCache saves IP data to cache (shared with domains)
-func (r *IPRepository) SaveCache(tx *sqlx.Tx, id string, data any, expiration time.Duration) error {
+func SaveIPReportCache(tx *sqlx.Tx, id string, data any, expiration time.Duration) error {
 	log.Printf("Starting cache save operation for ID: %s", id)
 
 	cacheData, err := json.Marshal(data)

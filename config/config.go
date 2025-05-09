@@ -41,3 +41,7 @@ func LoadConfig() (*Config, error) {
 
 	return cfg, nil
 }
+
+func GetVTAPIKey() string {
+	return os.Getenv("VT_API_KEY")
+}
