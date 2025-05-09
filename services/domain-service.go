@@ -62,7 +62,7 @@ func (s *VTService) FetchDomainVTReport(id, reportType string) (*models.Domain, 
 	defer resp.Body.Close()
 
 	// Parse API response
-	var vtResponse models.VirusTotalResponse
+	var vtResponse models.VirusTotalDomainResponse
 	err = json.NewDecoder(resp.Body).Decode(&vtResponse)
 	if err != nil {
 		log.Printf("Error decoding API response for ID %s: %v", id, err)

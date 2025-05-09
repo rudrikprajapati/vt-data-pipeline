@@ -65,7 +65,7 @@ type CacheEntry struct {
 }
 
 // VirusTotalResponse represents the response from VirusTotal API
-type VirusTotalResponse struct {
+type VirusTotalDomainResponse struct {
 	Data struct {
 		Attributes struct {
 			CreationDate        int64             `json:"creation_date"`
