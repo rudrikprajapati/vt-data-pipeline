@@ -181,30 +181,3 @@ func (s *VTService) FetchVTReport(id, reportType string) (*models.Domain, error)
 
 	return domain, nil
 }
-
-func (s *VTService) GetDomainData(id string) (*models.Domain, error) {
-	log.Printf("Starting GetDomainData for ID: %s", id)
-
-	// Check cache first
-	cache, err := s.domainRepo.GetFromCache(id)
-	if err == nil {
-		log.Printf("Cache hit for ID: %s", id)
-		var domain models.Domain
-		if err := json.Unmarshal(cache.Data, &domain); err != nil {
-			log.Printf("Error unmarshaling cached data for ID %s: %v", id, err)
-			return nil, err
-		}
-		return &domain, nil
-	}
-	log.Printf("Cache miss for ID: %s, fetching from database", id)
-
-	// If not in cache, get from database
-	domain, err := s.domainRepo.GetDomain(id)
-	if err != nil {
-		log.Printf("Error fetching domain from database for ID %s: %v", id, err)
-		return nil, err
-	}
-	log.Printf("Successfully fetched domain data for ID: %s", id)
-
-	return domain, nil
-}
