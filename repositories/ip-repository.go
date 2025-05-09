@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 
 	"vt-data-pipeline/models"
@@ -137,8 +138,11 @@ func (r *IPRepository) SaveDetails(details *models.IPDetails) error {
 
 // SaveCache saves IP data to cache (shared with domains)
 func (r *IPRepository) SaveCache(id string, data interface{}, expiration time.Duration) error {
+	log.Printf("Starting cache save operation for ID: %s", id)
+
 	cacheData, err := json.Marshal(data)
 	if err != nil {
+		log.Printf("Error marshaling cache data for ID %s: %v", id, err)
 		return err
 	}
 
@@ -149,11 +153,67 @@ func (r *IPRepository) SaveCache(id string, data interface{}, expiration time.Du
 		ExpiresAt: time.Now().Add(expiration),
 	}
 
-	_, err = r.db.NamedExec(`INSERT INTO domain_cache (id, data, cached_at, expires_at)
+	// Begin transaction
+	tx, err := r.db.Beginx()
+	if err != nil {
+		log.Printf("Error beginning transaction for cache save ID %s: %v", id, err)
+		return err
+	}
+	defer tx.Rollback()
+
+	// Check current cache size
+	var count int
+	err = tx.Get(&count, "SELECT COUNT(*) FROM domain_cache")
+	if err != nil {
+		log.Printf("Error getting cache count for ID %s: %v", id, err)
+		return err
+	}
+	log.Printf("Current cache size: %d entries", count)
+
+	// If cache is full (5 entries), remove the oldest entry
+	if count >= 5 {
+		// Get the oldest entry details before deleting
+		var oldestEntry struct {
+			ID       string    `db:"id"`
+			CachedAt time.Time `db:"cached_at"`
+		}
+		err = tx.Get(&oldestEntry, "SELECT id, cached_at FROM domain_cache ORDER BY cached_at ASC LIMIT 1")
+		if err != nil {
+			log.Printf("Error getting oldest cache entry for ID %s: %v", id, err)
+			return err
+		}
+
+		log.Printf("Cache full (5 entries). Removing oldest entry - ID: %s, Cached at: %v",
+			oldestEntry.ID, oldestEntry.CachedAt.Format(time.RFC3339))
+
+		_, err = tx.Exec("DELETE FROM domain_cache WHERE id IN (SELECT id FROM domain_cache ORDER BY cached_at ASC LIMIT 1)")
+		if err != nil {
+			log.Printf("Error deleting oldest cache entry for ID %s: %v", id, err)
+			return err
+		}
+		log.Printf("Successfully removed oldest cache entry")
+	}
+
+	// Insert new cache entry
+	_, err = tx.NamedExec(`INSERT INTO domain_cache (id, data, cached_at, expires_at)
                           VALUES (:id, :data, :cached_at, :expires_at)
                           ON CONFLICT (id) DO UPDATE SET
                           data = EXCLUDED.data,
                           cached_at = EXCLUDED.cached_at,
                           expires_at = EXCLUDED.expires_at`, cacheEntry)
-	return err
+	if err != nil {
+		log.Printf("Error inserting/updating cache entry for ID %s: %v", id, err)
+		return err
+	}
+	log.Printf("Successfully saved cache entry for ID: %s, Expires at: %v",
+		id, cacheEntry.ExpiresAt.Format(time.RFC3339))
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		log.Printf("Error committing transaction for cache save ID %s: %v", id, err)
+		return err
+	}
+	log.Printf("Successfully committed cache transaction for ID: %s", id)
+
+	return nil
 }
