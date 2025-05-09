@@ -8,6 +8,6 @@ import (
 )
 
 func SetupRoutes(r *gin.Engine, db *sqlx.DB) {
-	// get report from vt and save to db
-	r.GET("/report/:id", handlers.GetReport(db))
+	reportHandler := handlers.NewReportHandler(db)
+	r.GET("/report/:id", reportHandler.GetReport)
 }
