@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,31 +10,33 @@ import (
 	"time"
 	"vt-data-pipeline/config"
 	"vt-data-pipeline/models"
+	"vt-data-pipeline/redis"
 	"vt-data-pipeline/repositories"
 
 	"github.com/jmoiron/sqlx"
 )
 
-func FetchIPReport(id, reportType string, db *sqlx.DB) (*models.IPAddress, error) {
+func FetchIPReport(id, reportType string, db *sqlx.DB, redisClient *redis.Client, cfg *config.Config) (*models.IPAddress, error) {
 	log.Printf("Starting FetchIPReport for ID: %s, Type: %s", id, reportType)
 
-	// Check cache first
-	cache, err := repositories.GetIPReportFromCache(id, db)
-	if err == nil {
-		log.Printf("Cache hit for ID: %s", id)
+	// Check Redis cache first
+	cacheKey := fmt.Sprintf("ip:%s", id)
+	cachedData, err := redisClient.Get(context.Background(), cacheKey)
+	if err == nil && cachedData != "" {
+		log.Printf("Redis cache hit for ID: %s", id)
 		var ip models.IPAddress
-		if err := json.Unmarshal(cache.Data, &ip); err != nil {
+		if err := json.Unmarshal([]byte(cachedData), &ip); err != nil {
 			log.Printf("Error unmarshaling cached data for ID %s: %v", id, err)
 			return nil, err
 		}
 		return &ip, nil
 	}
-	log.Printf("Cache miss for ID: %s, proceeding with API call", id)
+	log.Printf("Redis cache miss for ID: %s, proceeding with API call", id)
 
 	// Fetch from VirusTotal API
 	url := fmt.Sprintf("https://www.virustotal.com/api/v3/%s/%s", reportType, id)
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("x-apikey", config.GetVTAPIKey())
+	req.Header.Set("x-apikey", cfg.VirusTotal.APIKey)
 
 	client := &http.Client{}
 	log.Printf("Making API request to VirusTotal for ID: %s", id)
@@ -165,12 +168,17 @@ func FetchIPReport(id, reportType string, db *sqlx.DB) (*models.IPAddress, error
 		}
 	}
 
-	// Save to cache
-	if err := repositories.SaveIPReportCache(tx, id, ip, 1*time.Hour); err != nil {
-		log.Printf("Error saving to cache for ID %s: %v", id, err)
-		return nil, err
+	// Save to Redis cache
+	ipJSON, err := json.Marshal(ip)
+	if err != nil {
+		log.Printf("Error marshaling IP for cache: %v", err)
+	} else {
+		if err := redisClient.Set(context.Background(), cacheKey, ipJSON, time.Hour); err != nil {
+			log.Printf("Error saving to Redis cache: %v", err)
+		} else {
+			log.Printf("Successfully saved to Redis cache for ID: %s", id)
+		}
 	}
-	log.Printf("Successfully saved to cache for ID: %s", id)
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {

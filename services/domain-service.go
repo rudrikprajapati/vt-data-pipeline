@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,31 +11,33 @@ import (
 
 	"vt-data-pipeline/config"
 	"vt-data-pipeline/models"
+	"vt-data-pipeline/redis"
 	"vt-data-pipeline/repositories"
 
 	"github.com/jmoiron/sqlx"
 )
 
-func FetchDomainVTReport(id, reportType string, db *sqlx.DB) (*models.Domain, error) {
+func FetchDomainVTReport(id, reportType string, db *sqlx.DB, redisClient *redis.Client, cfg *config.Config) (*models.Domain, error) {
 	log.Printf("Starting FetchVTReport for ID: %s, Type: %s", id, reportType)
 
-	// Check cache first
-	cache, err := repositories.GetDomainReportFromCache(id, db)
-	if err == nil {
-		log.Printf("Cache hit for ID: %s", id)
+	// Check Redis cache first
+	cacheKey := fmt.Sprintf("domain:%s", id)
+	cachedData, err := redisClient.Get(context.Background(), cacheKey)
+	if err == nil && cachedData != "" {
+		log.Printf("Redis cache hit for ID: %s", id)
 		var domain models.Domain
-		if err := json.Unmarshal(cache.Data, &domain); err != nil {
+		if err := json.Unmarshal([]byte(cachedData), &domain); err != nil {
 			log.Printf("Error unmarshaling cached data for ID %s: %v", id, err)
 			return nil, err
 		}
 		return &domain, nil
 	}
-	log.Printf("Cache miss for ID: %s, proceeding with API call", id)
+	log.Printf("Redis cache miss for ID: %s, proceeding with API call", id)
 
 	// Fetch from VirusTotal API
 	url := fmt.Sprintf("https://www.virustotal.com/api/v3/%s/%s", reportType, id)
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("x-apikey", config.GetVTAPIKey())
+	req.Header.Set("x-apikey", cfg.VirusTotal.APIKey)
 
 	client := &http.Client{}
 	log.Printf("Making API request to VirusTotal for ID: %s", id)
@@ -176,12 +179,17 @@ func FetchDomainVTReport(id, reportType string, db *sqlx.DB) (*models.Domain, er
 		}
 	}
 
-	// Save to cache
-	if err := repositories.SaveDomainCache(tx, id, domain, 1*time.Hour); err != nil {
-		log.Printf("Error saving to cache for ID %s: %v", id, err)
-		return nil, err
+	// Save to Redis cache
+	domainJSON, err := json.Marshal(domain)
+	if err != nil {
+		log.Printf("Error marshaling domain for cache: %v", err)
+	} else {
+		if err := redisClient.Set(context.Background(), cacheKey, domainJSON, time.Hour); err != nil {
+			log.Printf("Error saving to Redis cache: %v", err)
+		} else {
+			log.Printf("Successfully saved to Redis cache for ID: %s", id)
+		}
 	}
-	log.Printf("Successfully saved to cache for ID: %s", id)
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {

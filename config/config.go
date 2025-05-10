@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -15,9 +17,17 @@ type Config struct {
 	VirusTotal struct {
 		APIKey string
 	}
+	Redis struct {
+		URL      string
+		Password string
+	}
 }
 
 func LoadConfig() (*Config, error) {
+	if err := godotenv.Load(); err != nil {
+		return nil, errors.New("Error loading .env file: " + err.Error())
+	}
+
 	cfg := &Config{}
 
 	if dbURL := os.Getenv("DB_URL"); dbURL != "" {
@@ -39,9 +49,14 @@ func LoadConfig() (*Config, error) {
 		return nil, errors.New("VT_API_KEY is not set")
 	}
 
-	return cfg, nil
-}
+	// Redis configuration
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		cfg.Redis.URL = redisURL
+	} else {
+		return nil, errors.New("REDIS_URL is not set")
+	}
 
-func GetVTAPIKey() string {
-	return os.Getenv("VT_API_KEY")
+	cfg.Redis.Password = os.Getenv("REDIS_PASSWORD")
+
+	return cfg, nil
 }

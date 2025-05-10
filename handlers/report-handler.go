@@ -3,6 +3,8 @@ package handlers
 import (
 	"net/http"
 
+	"vt-data-pipeline/config"
+	"vt-data-pipeline/redis"
 	"vt-data-pipeline/services"
 
 	"github.com/gin-gonic/gin"
@@ -11,12 +13,18 @@ import (
 
 // ReportHandler handles report requests for domains and IP addresses
 type ReportHandler struct {
-	db *sqlx.DB
+	db          *sqlx.DB
+	redisClient *redis.Client
+	cfg         *config.Config
 }
 
 // NewReportHandler creates a new ReportHandler instance
-func NewReportHandler(db *sqlx.DB) *ReportHandler {
-	return &ReportHandler{db: db}
+func NewReportHandler(db *sqlx.DB, redisClient *redis.Client, cfg *config.Config) *ReportHandler {
+	return &ReportHandler{
+		db:          db,
+		redisClient: redisClient,
+		cfg:         cfg,
+	}
 }
 
 // GetReport handles the GET request for reports
@@ -34,9 +42,9 @@ func (h *ReportHandler) GetReport(c *gin.Context) {
 
 	switch reportType {
 	case "domains":
-		report, err = services.FetchDomainVTReport(id, reportType, h.db)
+		report, err = services.FetchDomainVTReport(id, reportType, h.db, h.redisClient, h.cfg)
 	case "ip_addresses":
-		report, err = services.FetchIPReport(id, reportType, h.db)
+		report, err = services.FetchIPReport(id, reportType, h.db, h.redisClient, h.cfg)
 	}
 
 	if err != nil {
