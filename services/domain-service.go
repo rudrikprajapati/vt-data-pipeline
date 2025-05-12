@@ -34,6 +34,29 @@ func FetchDomainVTReport(id, reportType string, db *sqlx.DB, redisClient *redis.
 	}
 	log.Printf("Redis cache miss for ID: %s, proceeding with API call", id)
 
+	// Check database for recent data (updated within last 24 hours)
+	domainFromDB, err := repositories.GetDomain(id, db)
+	if err == nil && domainFromDB != nil {
+		if time.Since(domainFromDB.UpdatedAt) < 24*time.Hour {
+			log.Printf("Found recent domain data in DB for ID: %s, updated at: %v", id, domainFromDB.UpdatedAt)
+			domainJSON, err := json.Marshal(domainFromDB)
+			if err != nil {
+				log.Printf("Error marshaling domain for cache: %v", err)
+			} else {
+				if err := redisClient.Set(context.Background(), cacheKey, domainJSON, time.Hour); err != nil {
+					log.Printf("Error saving to Redis cache: %v", err)
+				} else {
+					log.Printf("Successfully saved to Redis cache for ID: %s", id)
+				}
+			}
+			return domainFromDB, nil
+		}
+		log.Printf("DB data for ID %s is stale (updated at: %v), proceeding with API call", id, domainFromDB.UpdatedAt)
+	} else if err != nil {
+		log.Printf("No domain data found in DB for ID %s or error: %v", id, err)
+	}
+	log.Printf("Proceeding with VirusTotal API call for ID: %s", id)
+
 	// Fetch from VirusTotal API
 	url := fmt.Sprintf("https://www.virustotal.com/api/v3/%s/%s", reportType, id)
 	req, _ := http.NewRequest("GET", url, nil)

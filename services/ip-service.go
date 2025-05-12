@@ -33,6 +33,29 @@ func FetchIPReport(id, reportType string, db *sqlx.DB, redisClient *redis.Client
 	}
 	log.Printf("Redis cache miss for ID: %s, proceeding with API call", id)
 
+	// Check database for recent data (updated within last 24 hours)
+	IPFromDB, err := repositories.GetIPAddress(id, db)
+	if err == nil && IPFromDB != nil {
+		if time.Since(IPFromDB.UpdatedAt) < 24*time.Hour {
+			log.Printf("Found recent IP data in DB for ID: %s, updated at: %v", id, IPFromDB.UpdatedAt)
+			ipJSON, err := json.Marshal(IPFromDB)
+			if err != nil {
+				log.Printf("Error marshaling IP for cache: %v", err)
+			} else {
+				if err := redisClient.Set(context.Background(), cacheKey, ipJSON, time.Hour); err != nil {
+					log.Printf("Error saving to Redis cache: %v", err)
+				} else {
+					log.Printf("Successfully saved to Redis cache for ID: %s", id)
+				}
+			}
+			return IPFromDB, nil
+		}
+		log.Printf("DB data for ID %s is stale (updated at: %v), proceeding with API call", id, IPFromDB.UpdatedAt)
+	} else if err != nil {
+		log.Printf("No IP data found in DB for ID %s or error: %v", id, err)
+	}
+	log.Printf("Proceeding with VirusTotal API call for ID: %s", id)
+
 	// Fetch from VirusTotal API
 	url := fmt.Sprintf("https://www.virustotal.com/api/v3/%s/%s", reportType, id)
 	req, _ := http.NewRequest("GET", url, nil)
