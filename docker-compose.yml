@@ -1,6 +1,32 @@
 version: '3.8'
 
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DB_URL=postgres://vt_data_pipeline:vt_data_pipeline_password@postgres:5432/vt_data_pipeline?sslmode=disable
+      - VT_API_KEY=7c155eaab2d47e2d5df8b0ee25a5c80647bd30e37ab37c43adb635b0cd6720a9
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=
+      - PORT=8080
+      - GIN_MODE=release
+    volumes:
+      - ./.env:/app/.env
+    networks:
+      - vt-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   redis:
     image: redis/redis-stack:latest
     container_name: vt-data-pipeline-redis
